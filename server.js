@@ -1,142 +1,137 @@
 const express = require('express');
+const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
-const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const cors = require('cors');
+const { Pool } = require('pg');
 
 const app = express();
-
-// Middlewares
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-
-// Environment Variables or Default Setup
-const JWT_SECRET = process.env.JWT_SECRET || 'facebook_level_super_secure_secret_key_2026';
-const PORT = process.env.PORT || 5000;
-
-// PostgreSQL Database Connection
-const db = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:your_db_password@localhost:5432/nepal_match_db',
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
-});
-
-// Express Server लाई HTTP Server सँग जोड्ने
 const server = http.createServer(app);
 
-// Socket.io Setup (CORS अनुमति)
+// CORS Config
+app.use(cors());
+app.use(express.json());
+
+// Socket.io Config
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: '*',
+    methods: ['GET', 'POST']
   }
 });
 
-// Middleware: Authentication & Security Check
+// PostgreSQL Database Connection
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+// JWT Secret Key
+const JWT_SECRET = process.env.JWT_SECRET || 'nepalmatch_super_secret_key';
+
+// Middleware to Authenticate Token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Access token required.' });
+
+  if (!token) return res.status(401).json({ error: 'Access token required' });
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid or expired token.' });
+    if (err) return res.status(403).json({ error: 'Invalid or expired token' });
     req.user = user;
     next();
   });
 };
 
-// ----------------------
-// API ENDPOINTS
-// ----------------------
+// Root Health Check Route
+app.get('/', (req, res) => {
+  res.send('NepalMatch Backend API Server is Live & Running!');
+});
 
 // 1. User Register API
 app.post('/api/auth/register', async (req, res) => {
-  const { 
-    name, email, password, gender, lookingFor, age, originCountry, 
-    currentCity, qualification, occupation, intent, profilePicture, bio 
-  } = req.body;
+  const { name, email, password, gender, age, origin_country, current_city, qualification, occupation, bio } = req.body;
 
   try {
-    const hashedPassword = await bcrypt.hash(password, 12);
-    const query = `
-      INSERT INTO users (
-        name, email, password_hash, gender, looking_for, age, origin_country,
-        current_city, qualification, occupation, intent, profile_picture, bio
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
-      RETURNING id, name, email;
-    `;
-    const values = [
-      name, email, hashedPassword, gender, lookingFor, age, originCountry || 'Nepal',
-      currentCity, qualification, occupation, intent, profilePicture, bio
-    ];
-    const result = await db.query(query, values);
-    res.status(201).json({ message: 'Registration Successful', user: result.rows[0] });
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const result = await db.query(
+      `INSERT INTO users (name, email, password, gender, age, origin_country, current_city, qualification, occupation, bio)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, name, email`,
+      [name, email, hashedPassword, gender, age, origin_country, current_city, qualification, occupation, bio]
+    );
+
+    const token = jwt.sign({ userId: result.rows[0].id }, JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({ message: 'User registered successfully', token, user: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: 'Email already exists or invalid data.' });
+    res.status(500).json({ error: 'Registration failed or email already exists.' });
   }
 });
 
 // 2. User Login API
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
+
   try {
-    const userRes = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (userRes.rows.length === 0) return res.status(400).json({ error: 'User not found.' });
+    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (result.rows.length === 0) return res.status(400).json({ error: 'User not found' });
 
-    const user = userRes.rows[0];
-    const validPassword = await bcrypt.compare(password, user.password_hash);
-    if (!validPassword) return res.status(400).json({ error: 'Incorrect password.' });
+    const user = result.rows[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ error: 'Invalid password' });
 
-    const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ message: 'Login Successful', token, user });
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    delete user.password;
+    res.json({ message: 'Login successful', token, user });
   } catch (err) {
-    res.status(500).json({ error: 'Login server error.' });
+    res.status(500).json({ error: 'Login failed' });
   }
 });
 
-// 3. Send Match Request
+// 3. Send Match Request API
 app.post('/api/requests/send', authenticateToken, async (req, res) => {
   const { receiverId } = req.body;
   try {
     await db.query(
       'INSERT INTO match_requests (sender_id, receiver_id, status) VALUES ($1, $2, $3)',
-      [req.user.userId, receiverId, 'PENDING']
+      [req.user.userId, receiverId, 'pending']
     );
-    res.json({ message: 'Match request sent successfully.' });
+    res.json({ message: 'Match request sent successfully' });
   } catch (err) {
-    res.status(500).json({ error: 'Request already sent or error occurred.' });
+    res.status(500).json({ error: 'Failed to send request' });
   }
 });
 
-// 4. Accept Match Request
+// 4. Accept Match Request API
 app.post('/api/requests/accept', authenticateToken, async (req, res) => {
   const { requestId } = req.body;
   try {
-    await db.query('UPDATE match_requests SET status = $1 WHERE id = $2', ['ACCEPTED', requestId]);
-    res.json({ message: 'Request accepted! You can now chat and video call.' });
+    await db.query('UPDATE match_requests SET status = $1 WHERE id = $2', ['accepted', requestId]);
+    res.json({ message: 'Match request accepted' });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to accept request.' });
+    res.status(500).json({ error: 'Failed to accept request' });
   }
 });
 
-// 5. Privacy Settings Update
+// 5. Privacy Settings Update API
 app.put('/api/settings/privacy', authenticateToken, async (req, res) => {
-  const { allowDirectCalls } = req.body;
+  const { isPrivate } = req.body;
   try {
-    await db.query('UPDATE users SET allow_direct_calls = $1 WHERE id = $2', [allowDirectCalls, req.user.userId]);
-    res.json({ message: 'Privacy settings updated.' });
+    await db.query('UPDATE users SET is_private = $1 WHERE id = $2', [isPrivate, req.user.userId]);
+    res.json({ message: 'Privacy settings updated successfully' });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update settings.' });
+    res.status(500).json({ error: 'Failed to update settings' });
   }
 });
-// 6. Report/Block User (PostgreSQL Format)
+
+// 6. Report/Block User API
 app.post('/api/user/report-block', authenticateToken, async (req, res) => {
   const { reportedId, type, reason } = req.body;
   try {
     await db.query(
-      'INSERT INTO reports_and_blocks (reporter_id, reported_id, type, reason) VALUES ($1, $2, $3, $4)', 
+      'INSERT INTO reports_and_blocks (reporter_id, reported_id, type, reason) VALUES ($1, $2, $3, $4)',
       [req.user.userId, reportedId, type, reason]
     );
     res.json({ message: `User ${type.toLowerCase()}ed successfully.` });
@@ -145,8 +140,7 @@ app.post('/api/user/report-block', authenticateToken, async (req, res) => {
   }
 });
 
-// 👇 यहाँ निर राख्नुहोस् (Line 132 आसपास) 👇
-// 7. Get All Users API (For iPhone & Android App)
+// 7. Get All Users API (For iPhone & Android Apps)
 app.get('/api/users', authenticateToken, async (req, res) => {
   try {
     const result = await db.query(
@@ -159,49 +153,28 @@ app.get('/api/users', authenticateToken, async (req, res) => {
   }
 });
 
-// ----------------------
-// SOCKET.IO REAL-TIME CALL / CHAT
-// ----------------------
+// Socket.io Real-time WebRTC & Chat Signal Handlers
 io.on('connection', (socket) => {
-...
-// 6. Report/Block User (PostgreSQL Format)
-app.post('/api/user/report-block', authenticateToken, async (req, res) => {
-  const { reportedId, type, reason } = req.body;
-  try {
-    await db.query(
-      'INSERT INTO reports_and_blocks (reporter_id, reported_id, type, reason) VALUES ($1, $2, $3, $4)', 
-      [req.user.userId, reportedId, type, reason]
-    );
-    res.json({ message: `User ${type.toLowerCase()}ed successfully.` });
-  } catch (err) {
-    res.status(500).json({ error: 'Action failed.' });
-  }
-});
-
-// ----------------------
-// SOCKET.IO REAL-TIME CALL / CHAT
-// ----------------------
-io.on('connection', (socket) => {
-  console.log('A user connected:', socket.id);
-
-  socket.on('send_message', (data) => {
-    io.emit('receive_message', data);
-  });
+  console.log('User connected to socket:', socket.id);
 
   socket.on('join-room', (roomId) => {
     socket.join(roomId);
   });
 
-  socket.on('call-user', ({ userToCall, signalData, from }) => {
-    io.to(userToCall).emit('incoming-call', { signal: signalData, from });
+  socket.on('send-message', (data) => {
+    io.to(data.roomId).emit('receive-message', data);
   });
 
-  socket.on('answer-call', (data) => {
-    io.to(data.to).emit('call-accepted', data.signal);
+  socket.on('webrtc-offer', (data) => {
+    socket.to(data.roomId).emit('webrtc-offer', data);
   });
 
-  socket.on('end-call', ({ to }) => {
-    io.to(to).emit('call-ended');
+  socket.on('webrtc-answer', (data) => {
+    socket.to(data.roomId).emit('webrtc-answer', data);
+  });
+
+  socket.on('ice-candidate', (data) => {
+    socket.to(data.roomId).emit('ice-candidate', data);
   });
 
   socket.on('disconnect', () => {
@@ -209,9 +182,8 @@ io.on('connection', (socket) => {
   });
 });
 
-// ----------------------
-// SERVER START
-// ----------------------
+// Start Server
+const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running with Security & WebRTC on port ${PORT}`);
 });

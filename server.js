@@ -69,7 +69,6 @@ app.post('/api/login', (req, res) => {
     token: "fake-jwt-token-xyz" 
   });
 });
-
 app.listen(5000, () => console.log("Server running on port 5000"));
 const express = require('express');
 const http = require('http');
@@ -77,6 +76,7 @@ const { Server } = require('socket.io');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.json({ limit: '50mb' }));
@@ -172,9 +172,7 @@ res.status(500).json({ error: 'Failed to update settings.' });
 app.post('/api/user/report-block', authenticateToken, async (req, res) => {
 const { reportedId, type, reason } = req.body;
 try {
-await db.query('INSERT INTO reports_and_blocks (reporter_id, reported_id, type, reason) VALUES
-($1, $2, $3, $4)',
-[req.user.userId, reportedId, type, reason]);
+await db.query('INSERT INTO reports_and_blocks (reporter_id, reported_id, type, reason) VALUES (?, ?, ?, ?)', [reporter_id, reported_id, type, reason]);
 res.json({ message: `User ${type.toLowerCase()}ed successfully.` });
 } catch (err) {
 res.status(500).json({ error: 'Action failed.' });

@@ -40,7 +40,6 @@ io.on('connection', (socket) => {
 // app.listen को सट्टा server.listen प्रयोग गर्नुहोस्
 server.listen(5000, () => {
   console.log('Server is running on http://localhost:5000');
-});const express = require('express');
 const cors = require('cors');
 const app = express();
 

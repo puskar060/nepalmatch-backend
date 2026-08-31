@@ -131,7 +131,39 @@ app.put('/api/settings/privacy', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to update settings.' });
   }
 });
+// 6. Report/Block User (PostgreSQL Format)
+app.post('/api/user/report-block', authenticateToken, async (req, res) => {
+  const { reportedId, type, reason } = req.body;
+  try {
+    await db.query(
+      'INSERT INTO reports_and_blocks (reporter_id, reported_id, type, reason) VALUES ($1, $2, $3, $4)', 
+      [req.user.userId, reportedId, type, reason]
+    );
+    res.json({ message: `User ${type.toLowerCase()}ed successfully.` });
+  } catch (err) {
+    res.status(500).json({ error: 'Action failed.' });
+  }
+});
 
+// 👇 यहाँ निर राख्नुहोस् (Line 132 आसपास) 👇
+// 7. Get All Users API (For iPhone & Android App)
+app.get('/api/users', authenticateToken, async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT id, name, gender, age, origin_country, current_city, qualification, occupation, profile_picture, bio FROM users WHERE id != $1',
+      [req.user.userId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch users list.' });
+  }
+});
+
+// ----------------------
+// SOCKET.IO REAL-TIME CALL / CHAT
+// ----------------------
+io.on('connection', (socket) => {
+...
 // 6. Report/Block User (PostgreSQL Format)
 app.post('/api/user/report-block', authenticateToken, async (req, res) => {
   const { reportedId, type, reason } = req.body;

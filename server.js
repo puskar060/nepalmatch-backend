@@ -9,11 +9,11 @@ const { Pool } = require('pg');
 const app = express();
 const server = http.createServer(app);
 
-// CORS Config
+// Enable CORS and JSON parsing
 app.use(cors());
 app.use(express.json());
 
-// Socket.io Config
+// Setup Socket.io for Real-Time Chat & WebRTC
 const io = new Server(server, {
   cors: {
     origin: '*',
@@ -21,7 +21,7 @@ const io = new Server(server, {
   }
 });
 
-// PostgreSQL Database Connection
+// PostgreSQL Database Connection Pool
 const db = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -29,10 +29,10 @@ const db = new Pool({
   }
 });
 
-// JWT Secret Key
+// Secret key for JWT signing
 const JWT_SECRET = process.env.JWT_SECRET || 'nepalmatch_super_secret_key';
 
-// Middleware to Authenticate Token
+// Middleware to protect routes via Token Verification
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -46,12 +46,12 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Root Health Check Route
+// 1. Health Check Route
 app.get('/', (req, res) => {
   res.send('NepalMatch Backend API Server is Live & Running!');
 });
 
-// 1. User Register API
+// 2. User Register API
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password, gender, age, origin_country, current_city, qualification, occupation, bio } = req.body;
 
@@ -70,7 +70,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// 2. User Login API
+// 3. User Login API
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -90,7 +90,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// 3. Send Match Request API
+// 4. Send Match Request API
 app.post('/api/requests/send', authenticateToken, async (req, res) => {
   const { receiverId } = req.body;
   try {
@@ -104,7 +104,7 @@ app.post('/api/requests/send', authenticateToken, async (req, res) => {
   }
 });
 
-// 4. Accept Match Request API
+// 5. Accept Match Request API
 app.post('/api/requests/accept', authenticateToken, async (req, res) => {
   const { requestId } = req.body;
   try {
@@ -115,7 +115,7 @@ app.post('/api/requests/accept', authenticateToken, async (req, res) => {
   }
 });
 
-// 5. Privacy Settings Update API
+// 6. Privacy Settings Update API
 app.put('/api/settings/privacy', authenticateToken, async (req, res) => {
   const { isPrivate } = req.body;
   try {
@@ -126,7 +126,7 @@ app.put('/api/settings/privacy', authenticateToken, async (req, res) => {
   }
 });
 
-// 6. Report/Block User API
+// 7. Report/Block User API
 app.post('/api/user/report-block', authenticateToken, async (req, res) => {
   const { reportedId, type, reason } = req.body;
   try {
@@ -140,7 +140,7 @@ app.post('/api/user/report-block', authenticateToken, async (req, res) => {
   }
 });
 
-// 7. Get All Users API (For iPhone & Android Apps)
+// 8. Fetch/Download All Users API (For App Frontend)
 app.get('/api/users', authenticateToken, async (req, res) => {
   try {
     const result = await db.query(
@@ -153,7 +153,7 @@ app.get('/api/users', authenticateToken, async (req, res) => {
   }
 });
 
-// Socket.io Real-time WebRTC & Chat Signal Handlers
+// Socket.io Signaling Handlers for WebRTC & Chat
 io.on('connection', (socket) => {
   console.log('User connected to socket:', socket.id);
 
@@ -182,7 +182,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start Server
+// Bind and listen to specified Port
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running with Security & WebRTC on port ${PORT}`);

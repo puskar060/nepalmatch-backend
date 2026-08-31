@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NepalMatch - Dating & Matrimony</title>
+  
+  <!-- Socket.io CDN Library -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    body { background-color: #f0f2f5; }
+    
+    nav { background: #1877f2; color: white; display: flex; justify-content: space-between; padding: 12px 20px; align-items: center; }
+    nav .logo { font-size: 20px; font-weight: bold; }
+    nav ul { list-style: none; display: flex; gap: 15px; }
+    nav ul li a { color: white; text-decoration: none; font-weight: bold; font-size: 14px; cursor: pointer; }
+
+    .container { max-width: 500px; margin: 30px auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    h2 { color: #1877f2; text-align: center; margin-bottom: 20px; }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; font-size: 13px; }
+    input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+    .btn { background: #1877f2; color: white; padding: 12px; border: none; width: 100%; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; font-size: 15px; }
+    .btn-secondary { background: #e91e63; }
+    .btn-danger { background: #dc3545; }
+    .btn:hover { opacity: 0.9; }
+
+    .preview-img { width: 110px; height: 110px; border-radius: 55px; object-fit: cover; display: block; margin: 10px auto; border: 3px solid #1877f2; }
+    .page { display: none; }
+    .active-page { display: block; }
+    
+    .user-card { border: 1px solid #e0e0e0; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: center; background: #fafafa; }
+    .user-card img { width: 80px; height: 80px; border-radius: 40px; margin-bottom: 10px; object-fit: cover; }
+    .user-card h3 { color: #333; margin-bottom: 5px; }
+    .user-card p { color: #666; font-size: 13px; margin-bottom: 10px; }
+    .status-badge { display: inline-block; padding: 4px 8px; background: #e7f3ff; color: #1877f2; border-radius: 4px; font-size: 12px; font-weight: bold; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <nav id="navbar" style="display: none;">
+    <div class="logo">🇳🇵 NepalMatch</div>
+    <ul>
+      <li><a onclick="showPage('matchesPage')">Find Matches</a></li>
+      <li><a onclick="showPage('profilePage')">My Profile</a></li>
+      <li><a onclick="showPage('settingsPage')">Settings</a></li>
+      <li><a onclick="logout()" style="color: #ffc107;">Logout</a></li>
+    </ul>
+  </nav>
+
+  <!-- REGISTER / LOGIN PAGE -->
+  <div id="authPage" class="container page active-page">
+    <h2 id="authTitle">🇳🇵 Register to NepalMatch</h2>
+    <form id="authForm" onsubmit="handleAuth(event)">
+      
+      <div class="form-group reg-only" style="text-align: center; margin-bottom: 20px;">
+        <img id="regProfilePreview" class="preview-img" src="https://via.placeholder.com/150" alt="Profile Preview">
+        <label for="regImageInput" style="cursor: pointer; color: #e91e63; font-weight: bold;">📷 Click to Upload Profile Photo</label>
+        <input type="file" id="regImageInput" accept="image/*" style="display: none;">
+      </div>
+
+      <div class="form-group reg-only">
+        <label>Full Name *</label>
+        <input type="text" id="regName" placeholder="Enter your full name" required>
+      </div>
+
+      <div class="form-group">
+        <label>Email Address *</label>
+        <input type="email" id="authEmail" placeholder="user@example.com" required>
+      </div>
+
+      <div class="form-group">
+        <label>Password *</label>
+        <input type="password" id="authPassword" placeholder="••••••••" required>
+      </div>
+
+      <div class="form-group reg-only">
+        <label>Date of Birth *</label>
+        <input type="date" id="regDob" onchange="calculateAge()" required>
+      </div>
+
+      <div class="form-group reg-only">
+        <label>Age</label>
+        <input type="number" id="regAge" placeholder="Calculated from DOB" readonly style="background-color: #e9ecef;">
+      </div>
+
+      <div class="form-group reg-only">
+        <label>Origin Country *</label>
+        <input type="text" id="regOrigin" value="Nepal 🇳🇵" required>
+      </div>
+
+      <div class="form-group reg-only">
+        <label>Currently Living Country & City *</label>
+        <input type="text" id="regCity" placeholder="e.g., Tokyo, Japan 🇯🇵" required>
+      </div>
+
+      <div class="form-group reg-only">
+        <label>Educational Qualification *</label>
+        <input type="text" id="regQual" placeholder="e.g., Bachelor in Computer Science" required>
+      </div>
+
+      <button type="submit" class="btn" id="authBtn">Create Account & Login</button>
+      <button type="button" class="btn btn-secondary" onclick="toggleAuthMode()" style="margin-top: 10px;">Already have an account? Login</button>
+    </form>
+  </div>
+
+  <!-- MY PROFILE PAGE -->
+  <div id="profilePage" class="container page">
+    <h2>My Profile Details</h2>
+    <form onsubmit="saveProfile(event)">
+      <div class="form-group" style="text-align: center;">
+        <img id="profilePreview" class="preview-img" src="https://via.placeholder.com/150" alt="Profile Preview">
+        <label for="imageInput" style="cursor: pointer; color: #e91e63; font-weight: bold;">📷 Change Profile Photo</label>
+        <input type="file" id="imageInput" accept="image/*" style="display: none;">
+      </div>
+
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="profileName" required>
+      </div>
+
+      <div class="form-group">
+        <label>Date of Birth</label>
+        <input type="date" id="profileDob" required>
+      </div>
+
+      <div class="form-group">
+        <label>Age</label>
+        <input type="number" id="profileAge" readonly style="background-color: #e9ecef;">
+      </div>
+
+      <div class="form-group">
+        <label>Origin Country</label>
+        <input type="text" id="profileOrigin" required>
+      </div>
+
+      <div class="form-group">
+        <label>Currently Living Place</label>
+        <input type="text" id="profileCity" required>
+      </div>
+
+      <div class="form-group">
+        <label>Qualification</label>
+        <input type="text" id="profileQual" required>
+      </div>
+
+      <button type="submit" class="btn">Update Profile</button>
+    </form>
+  </div>
+
+  <!-- FIND MATCHES PAGE -->
+  <div id="matchesPage" class="container page">
+    <h2>Nepali Couples & Matches</h2>
+    
+    <div class="user-card">
+      <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150" alt="Match Profile">
+      <h3>Sita Shrestha, 23</h3>
+      <div class="status-badge">📍 Tokyo, Japan | 🎓 IT Student</div>
+      <p>Origin: Nepal 🇳🇵</p>
+      <button class="btn" id="reqBtn1" onclick="sendMatchRequest('reqBtn1')">Send Match Request</button>
+      <button class="btn btn-secondary" style="display: none;" id="callBtn1" onclick="startVideoCall('Sita Shrestha')">📹 Start Video Call</button>
+    </div>
+
+    <div class="user-card">
+      <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150" alt="Match Profile">
+      <h3>Aarav Sharma, 25</h3>
+      <div class="status-badge">📍 Osaka, Japan | 🎓 Hospitality</div>
+      <p>Origin: Nepal 🇳🇵</p>
+      <button class="btn" id="reqBtn2" onclick="sendMatchRequest('reqBtn2')">Send Match Request</button>
+      <button class="btn btn-secondary" style="display: none;" id="callBtn2" onclick="startVideoCall('Aarav Sharma')">📹 Start Video Call</button>
+    </div>
+  </div>
+
+  <!-- PRIVACY & SETTINGS PAGE -->
+  <div id="settingsPage" class="container page">
+    <h2>🔒 Privacy & Security Settings</h2>
+    <div class="form-group" style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
+      <label style="margin: 0;">Allow Direct Video Calls from Non-Matches</label>
+      <input type="checkbox" id="directCallsToggle" style="width: auto;">
+    </div>
+    <p style="font-size: 12px; color: #666; margin-top: 5px;">If unchecked, only users whose request you accepted can send messages or video call you.</p>
+
+    <button class="btn btn-danger" onclick="logout()" style="margin-top: 30px;">Logout</button>
+  </div>
+
+  <!-- JAVASCRIPT CODE STARTS HERE -->
+  <script>
+    let isRegister = true;
+
+    // Socket.io Client Setup
+    const socket = io('http://localhost:5000');
+
+    socket.on('connect', () => {
+      console.log('Connected to Socket Server:', socket.id);
+    });
+
+    socket.on('receive_message', (data) => {
+      alert(`Message from ${data.sender}: ${data.text}`);
+    });
+
+    function calculateAge() {
+      const dobInput = document.getElementById('regDob').value;
+      if (dobInput) {
+        const dob = new Date(dobInput);
+        const diff = Date.now() - dob.getTime();
+        const ageDate = new Date(diff);
+        const age = Math.abs(ageDate.getUTCFullYear() - 1970);
+        document.getElementById('regAge').value = age;
+      }
+    }
+
+    function toggleAuthMode() {
+      isRegister = !isRegister;
+      document.getElementById('authTitle').innerText = isRegister ? "🇳🇵 Register to NepalMatch" : "🇳🇵 Login to NepalMatch";
+      
+      const regFields = document.querySelectorAll('.reg-only');
+      regFields.forEach(el => el.style.display = isRegister ? 'block' : 'none');
+
+      document.getElementById('regName').required = isRegister;
+      document.getElementById('regDob').required = isRegister;
+      document.getElementById('regOrigin').required = isRegister;
+      document.getElementById('regCity').required = isRegister;
+      document.getElementById('regQual').required = isRegister;
+
+      document.getElementById('authBtn').innerText = isRegister ? "Create Account & Login" : "Login";
+    }
+
+    async function handleAuth(e) {
+      e.preventDefault();
+
+      if (isRegister) {
+        const userData = {
+          name: document.getElementById('regName').value,
+          email: document.getElementById('authEmail').value,
+          password: document.getElementById('authPassword').value,
+          dob: document.getElementById('regDob').value,
+          age: document.getElementById('regAge').value,
+          origin: document.getElementById('regOrigin').value,
+          city: document.getElementById('regCity').value,
+          qual: document.getElementById('regQual').value
+        };
+
+        try {
+          const response = await fetch('http://localhost:5000/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData)
+          });
+
+          const result = await response.json();
+
+          if (response.ok) {
+            alert("Registration Successful!");
+            document.getElementById('profileName').value = userData.name;
+            document.getElementById('profileCity').value = userData.city;
+            document.getElementById('profileQual').value = userData.qual;
+            
+            document.getElementById('navbar').style.display = 'flex';
+            showPage('matchesPage');
+          } else {
+            alert(result.message || "Registration failed!");
+          }
+        } catch (error) {
+          console.error("Error connecting to server:", error);
+          // UI Demo fallback (if server is not running)
+          alert("Note: Server connection failed, showing demo UI.");
+          document.getElementById('profileName').value = userData.name;
+          document.getElementById('navbar').style.display = 'flex';
+          showPage('matchesPage');
+        }
+      } else {
+        document.getElementById('navbar').style.display = 'flex';
+        showPage('matchesPage');
+      }
+    }
+
+    function showPage(pageId) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+      document.getElementById(pageId).classList.add('active-page');
+    }
+
+    function saveProfile(e) {
+      e.preventDefault();
+      alert('Profile details updated successfully!');
+      showPage('matchesPage');
+    }
+
+    function sendMatchRequest(btnId) {
+      const btn = document.getElementById(btnId);
+      btn.innerText = "Request Pending...";
+      btn.disabled = true;
+      btn.style.background = "#6c757d";
+
+      setTimeout(() => {
+        btn.innerText = "Match Accepted! ✓";
+        btn.style.background = "#28a745";
+        const callBtnId = btnId.replace('reqBtn', 'callBtn');
+        document.getElementById(callBtnId).style.display = "block";
+      }, 2000);
+    }
+
+    function startVideoCall(name) {
+      const allowDirect = document.getElementById('directCallsToggle').checked;
+      alert(`Connecting WebRTC Video Call with ${name}...\n(Privacy Setting: ${allowDirect ? "Open Calls Allowed" : "Matched Contacts Only"})`);
+    }
+
+    function logout() {
+      document.getElementById('navbar').style.display = 'none';
+      document.getElementById('authEmail').value = '';
+      document.getElementById('authPassword').value = '';
+      showPage('authPage');
+    }
+
+    // Image Handlers
+    document.getElementById('regImageInput').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) { 
+          document.getElementById('regProfilePreview').src = e.target.result;
+          document.getElementById('profilePreview').src = e.target.result; 
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    document.getElementById('imageInput').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) { document.getElementById('profilePreview').src = e.target.result; };
+        reader.readAsDataURL(file);
+      }
+    });
+  </script>
+</body>
+</html>
